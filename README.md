@@ -1,6 +1,6 @@
 # Introduction to Soft Matter 2025
 
-Welcome to the course repository for Introduction to Soft Matter 2025! This repository contains course materials, assignments, and collaborative learning resources.
+Welcome to the mid-course repository for Introduction to Soft Matter 2025.
 
 **Repository**: [https://github.com/comphy-lab/Intro-Soft-Matter-2025](https://github.com/comphy-lab/Intro-Soft-Matter-2025)
 
@@ -26,10 +26,10 @@ Your task is to numerically solve this ODE and visualize the solution by plottin
 ### Assignment Objectives
 
 This assignment is designed to help you:
-1. **Experience AI-assisted coding**: Learn how to effectively use Large Language Models (LLMs) for code generation
-2. **Develop debugging skills**: Understand that initial AI-generated code often requires refinement
-3. **Practice iterative development**: Learn to improve code through testing and iteration
-4. **Collaborate using GitHub**: Gain experience with version control and pull requests
+1. **Experience AI-assisted coding**: Learn how to effectively use Large Language Models (LLMs) for code generation.
+2. **Develop debugging skills**: Understand that initial AI-generated code often requires refinement.
+3. **Practice iterative development**: Learn to improve code through testing and iteration.
+4. **Collaborate using GitHub**: Gain experience with version control and pull requests.
 
 ### Part 1: Initial LLM-Generated Code
 

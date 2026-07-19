@@ -4,6 +4,8 @@ Welcome to the mid-course repository for Introduction to Soft Matter 2025.
 
 **Repository**: [https://github.com/comphy-lab/Intro-Soft-Matter-2025](https://github.com/comphy-lab/Intro-Soft-Matter-2025)
 
+This take-home assignment is the **mid-course assessment and is worth 40% of the course mark**.
+
 ---
 
 ## Take-Home Homework Assignment: Contact Line Singularity
@@ -43,8 +45,8 @@ Copy and paste the following prompt into your chosen LLM:
 
 ```text
 Solve the following ODE with boundary conditions:
-- ODE: dh/dx = -0.01(1/(h^2+h))
-- BCs: h(0) = 0, h'(0) = 1, h''() = 0
+- ODE: d^3h/dx^3 = -0.01/(h^2 + h)
+- BCs: h(0) = 0, h'(0) = 1, h''(infinity) = 0
 
 Write a [INSERT YOUR LANGUAGE HERE] script that:
 1. Solves this ODE numerically
@@ -56,7 +58,7 @@ Please provide complete, runnable code.
 
 #### Step 3: Save the Initial Code
 
-- Save exactly what the LLM gives you as `firstname-lastname-v1.py` (or `.m`, `.jl`, etc., depending on your language)
+- Save exactly what the LLM gives you as `YOUR-GITHUB-USERNAME_firstname-lastname-v1.py` (or `.m`, `.jl`, etc., depending on your language)
 - **Do not modify this code yet!**
 - This file represents your first attempt using AI assistance
 
@@ -90,7 +92,7 @@ You can use any combination of these approaches:
   - Solves the ODE with the correct boundary conditions
   - Produces meaningful plots
   - Runs without errors
-- Save your final working version as `firstname-lastname-v2.py` (or appropriate extension)
+- Save your final working version as `YOUR-GITHUB-USERNAME_firstname-lastname-v2.py` (or the appropriate extension)
 
 #### What We're Looking For
 
@@ -107,6 +109,14 @@ Your refined code should:
 
 You will submit your work by creating a Pull Request (PR) on GitHub. Below are two methods: GUI-based (recommended for beginners) and terminal-based (for those comfortable with Git).
 
+Put every submitted file at `submissions/<github-user>_<filename>`, replacing `<github-user>` with your exact GitHub username. For example, GitHub user `octocat` would submit `submissions/octocat_ada-lovelace-v1.py` and `submissions/octocat_ada-lovelace-v2.py`. Use the same prefix for optional plots or supporting files.
+
+An automated check verifies the submission location, filename prefix, and presence of `v1` and `v2`. It does **not** run submitted programs.
+
+### Public visibility and consent
+
+This is a public repository. Your files, commit history, GitHub username, Pull Request description, and discussion will be publicly visible and may remain in the repository history. Do not include student numbers, marks, private contact details, API keys, passwords, tokens, or other sensitive information. By opening a Pull Request, you confirm that you understand this public submission route and consent to publishing the material you submit. If you do not want to submit publicly, contact the course instructor for an alternative before opening a Pull Request.
+
 ### Method 1: GUI-Based Submission (Recommended)
 
 #### Step 1: Fork the Repository
@@ -118,11 +128,12 @@ You will submit your work by creating a Pull Request (PR) on GitHub. Below are t
 #### Step 2: Upload Your Files
 
 1. Navigate to your forked repository (it will be at `https://github.com/YOUR-USERNAME/Intro-Soft-Matter-2025`)
-2. Click **"Add file"** � **"Upload files"**
-3. Drag and drop or select both files:
-   - `firstname-lastname-v1.py` (or your language extension)
-   - `firstname-lastname-v2.py`
-4. Scroll down to the "Commit changes" section
+2. Open the `submissions` folder.
+3. Click **"Add file"** → **"Upload files"**.
+4. Drag and drop or select both files, already named with your GitHub username prefix:
+   - `YOUR-GITHUB-USERNAME_firstname-lastname-v1.py` (or your language extension)
+   - `YOUR-GITHUB-USERNAME_firstname-lastname-v2.py`
+5. Check that GitHub shows both files under `submissions/`, then scroll down to the "Commit changes" section.
 
 #### Step 3: Write a Commit Message
 
@@ -140,7 +151,7 @@ Add contact line singularity homework submission
 #### Step 4: Create Pull Request
 
 1. After committing, you'll see a banner saying **"This branch is 1 commit ahead of comphy-lab:main"**
-2. Click **"Contribute"** � **"Open pull request"**
+2. Click **"Contribute"** → **"Open pull request"**.
 3. In the PR description, briefly explain:
    - Which LLM you used
    - What challenges you encountered
@@ -174,12 +185,13 @@ git checkout -b homework-submission-yourname
 #### Step 3: Add Your Files
 
 ```bash
-# Copy your files to the repository directory
-cp /path/to/your/firstname-lastname-v1.py .
-cp /path/to/your/firstname-lastname-v2.py .
+# Copy your files into submissions/ using your exact GitHub username
+cp /path/to/your/firstname-lastname-v1.py submissions/YOUR-GITHUB-USERNAME_firstname-lastname-v1.py
+cp /path/to/your/firstname-lastname-v2.py submissions/YOUR-GITHUB-USERNAME_firstname-lastname-v2.py
 
 # Stage the files
-git add firstname-lastname-v1.py firstname-lastname-v2.py
+git add submissions/YOUR-GITHUB-USERNAME_firstname-lastname-v1.py \
+        submissions/YOUR-GITHUB-USERNAME_firstname-lastname-v2.py
 ```
 
 #### Step 4: Commit with a Good Message

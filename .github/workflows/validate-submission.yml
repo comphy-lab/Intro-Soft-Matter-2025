@@ -1,0 +1,107 @@
+name: Validate student submission
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate-submission:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the proposed changes
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate paths and filenames without running submitted code
+        env:
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$AUTHOR_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "Trusted maintainer PR: student filename rules do not apply."
+              exit 0
+              ;;
+          esac
+
+          errors=0
+          found_v1=0
+          found_v2=0
+          changed_count=0
+          deleted_count=0
+
+          while IFS= read -r -d '' path; do
+            deleted_count=$((deleted_count + 1))
+          done < <(git diff --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA")
+
+          if ((deleted_count > 0)); then
+            echo "::error::Student Pull Requests must not delete existing files."
+            errors=1
+          fi
+
+          while IFS= read -r -d '' path; do
+            changed_count=$((changed_count + 1))
+
+            if [[ "$path" != submissions/* ]]; then
+              echo "::error file=$path::Student files must be placed directly in submissions/."
+              errors=1
+              continue
+            fi
+
+            filename=${path#submissions/}
+            if [[ "$filename" == */* ]]; then
+              echo "::error file=$path::Do not create nested folders inside submissions/."
+              errors=1
+              continue
+            fi
+
+            required_prefix="${PR_AUTHOR}_"
+            if [[ "$filename" != "$required_prefix"* ]]; then
+              echo "::error file=$path::Filename must start with ${required_prefix}"
+              errors=1
+            fi
+
+            student_filename=${filename#"$required_prefix"}
+            if [[ "$student_filename" =~ -v1([._-]|$) ]]; then
+              found_v1=1
+            fi
+            if [[ "$student_filename" =~ -v2([._-]|$) ]]; then
+              found_v2=1
+            fi
+
+            mode=$(git ls-tree "$HEAD_SHA" -- "$path" | awk '{print $1}')
+            if [[ "$mode" == "120000" ]]; then
+              echo "::error file=$path::Symbolic links are not accepted as submissions."
+              errors=1
+            fi
+          done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
+
+          if ((changed_count == 0)); then
+            echo "::error::The Pull Request contains no changed files."
+            errors=1
+          fi
+
+          if ((found_v1 == 0)); then
+            echo "::error::Include the initial LLM output with -v1 in its filename."
+            errors=1
+          fi
+          if ((found_v2 == 0)); then
+            echo "::error::Include the refined solution with -v2 in its filename."
+            errors=1
+          fi
+
+          if ((errors != 0)); then
+            exit 1
+          fi
+
+          echo "Submission paths and filenames are valid. Submitted code was not executed."

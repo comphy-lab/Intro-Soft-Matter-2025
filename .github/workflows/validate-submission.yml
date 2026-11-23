@@ -1,28 +1,43 @@
 name: Validate student submission
 
+# pull_request_target runs this file as it is on main, so a Pull Request cannot
+# change the rules it is checked against. The job has no secrets and never
+# checks out or runs anything from the Pull Request: it fetches the
+# proposed commits into a bare repository and reads paths and file modes only.
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
+    types:
+      - opened
+      - reopened
+      - synchronize
 
+# The token can only read Pull Request metadata. It is used for one API call
+# and is never given to Git.
 permissions:
-  contents: read
+  pull-requests: read
+
+concurrency:
+  group: validate-submission-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   validate-submission:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Check out the proposed changes
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Validate paths and filenames without running submitted code
+      - name: Validate paths and filenames without checking out submitted code
         env:
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          PR_API_URL: ${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          MERGE_REF_ATTEMPTS: "12"
+          MERGE_REF_WAIT_SECONDS: "10"
         shell: bash
         run: |
           set -euo pipefail
@@ -34,26 +49,57 @@ jobs:
               ;;
           esac
 
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Unexpected Pull Request metadata."
+            exit 1
+          fi
+
           errors=0
           found_v1=0
           found_v2=0
           changed_count=0
           deleted_count=0
 
-          # The checkout is GitHub's test merge of this Pull Request into main.
-          # Its first parent is main, so this diff is exactly what merging would
-          # change, even when the fork is behind main.
-          if [[ "$(git rev-parse --verify --quiet HEAD^2)" != "$HEAD_SHA" ]]; then
-            echo "::error::The checkout is not the test merge of this Pull Request. Re-run the check."
+          work_dir=$(mktemp -d)
+          trap 'rm -rf -- "$work_dir"' EXIT
+          export GIT_DIR="$work_dir/repo.git"
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
+          git init --quiet --bare "$GIT_DIR"
+
+          # GitHub's test merge of this Pull Request into main. Its first parent
+          # is main, so the diff below is exactly what merging would change, even
+          # when the fork is behind main. GitHub builds it on demand, so ask for
+          # the Pull Request first, then wait until the ref is the merge of this
+          # head commit. The request only prompts GitHub; the ref check below is
+          # what decides, so a failed request cannot make a submission pass.
+          merged=
+          for ((attempt = 1; attempt <= MERGE_REF_ATTEMPTS; attempt++)); do
+            if [[ -n "${PR_API_URL:-}" ]]; then
+              curl --silent --show-error --fail --max-time 20 --output /dev/null \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "Accept: application/vnd.github+json" \
+                "$PR_API_URL" || echo "Could not ask GitHub for the Pull Request (attempt ${attempt})."
+            fi
+            if git -c fetch.fsckObjects=true fetch --quiet --no-tags --depth=2 "$REPO_URL" \
+                "+refs/pull/${PR_NUMBER}/merge:refs/validate/merge" 2>/dev/null \
+              && [[ "$(git rev-parse --verify --quiet 'refs/validate/merge^2')" == "$HEAD_SHA" ]]; then
+              merged=$(git rev-parse --verify refs/validate/merge)
+              break
+            fi
+            if ((attempt < MERGE_REF_ATTEMPTS)); then
+              sleep "$MERGE_REF_WAIT_SECONDS"
+            fi
+          done
+          if [[ -z "$merged" ]]; then
+            echo "::error::No test merge of this Pull Request is available. Resolve any conflict with main, then re-run the check."
             exit 1
           fi
-          base=$(git rev-parse --verify HEAD^1)
-          merged=$(git rev-parse --verify HEAD)
+          base=$(git rev-parse --verify "${merged}^1")
 
           # A rename must be checked as both a source deletion and a destination.
           # Materialize the diff first so Git errors fail the step.
-          diff_dir=$(mktemp -d)
-          trap 'rm -rf -- "$diff_dir"' EXIT
+          diff_dir="$work_dir/diff"
+          mkdir "$diff_dir"
           git diff --no-renames --diff-filter=D --name-only -z "$base" "$merged" > "$diff_dir/deleted"
           git diff --no-renames --name-only -z "$base" "$merged" > "$diff_dir/changed"
           while IFS= read -r -d '' path; do
@@ -67,6 +113,13 @@ jobs:
 
           while IFS= read -r -d '' path; do
             changed_count=$((changed_count + 1))
+
+            # Paths are printed below, so refuse ones that could forge log commands.
+            if [[ "$path" == *[[:cntrl:]]* ]]; then
+              echo "::error::A changed filename contains control characters."
+              errors=1
+              continue
+            fi
 
             if [[ "$path" != submissions/* ]]; then
               echo "::error file=$path::Student files must be placed directly in submissions/."
@@ -120,4 +173,4 @@ jobs:
             exit 1
           fi
 
-          echo "Submission paths and filenames are valid. Submitted code was not executed."
+          echo "Submission paths and filenames are valid. Submitted code was neither checked out nor executed."

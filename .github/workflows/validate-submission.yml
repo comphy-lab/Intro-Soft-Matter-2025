@@ -21,7 +21,6 @@ jobs:
       - name: Validate paths and filenames without running submitted code
         env:
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         shell: bash
@@ -41,12 +40,22 @@ jobs:
           changed_count=0
           deleted_count=0
 
+          # The checkout is GitHub's test merge of this Pull Request into main.
+          # Its first parent is main, so this diff is exactly what merging would
+          # change, even when the fork is behind main.
+          if [[ "$(git rev-parse --verify --quiet HEAD^2)" != "$HEAD_SHA" ]]; then
+            echo "::error::The checkout is not the test merge of this Pull Request. Re-run the check."
+            exit 1
+          fi
+          base=$(git rev-parse --verify HEAD^1)
+          merged=$(git rev-parse --verify HEAD)
+
           # A rename must be checked as both a source deletion and a destination.
           # Materialize the diff first so Git errors fail the step.
           diff_dir=$(mktemp -d)
           trap 'rm -rf -- "$diff_dir"' EXIT
-          git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$diff_dir/deleted"
-          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$diff_dir/changed"
+          git diff --no-renames --diff-filter=D --name-only -z "$base" "$merged" > "$diff_dir/deleted"
+          git diff --no-renames --name-only -z "$base" "$merged" > "$diff_dir/changed"
           while IFS= read -r -d '' path; do
             deleted_count=$((deleted_count + 1))
           done < "$diff_dir/deleted"
@@ -86,7 +95,7 @@ jobs:
               found_v2=1
             fi
 
-            mode=$(git ls-tree "$HEAD_SHA" -- "$path" | awk '{print $1}')
+            mode=$(git ls-tree "$merged" -- "$path" | awk '{print $1}')
             if [[ "$mode" != "100644" && "$mode" != "100755" ]]; then
               echo "::error file=$path::Only regular files are accepted as submissions."
               errors=1

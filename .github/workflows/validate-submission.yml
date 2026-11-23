@@ -33,6 +33,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
           PR_API_URL: ${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
@@ -49,7 +50,8 @@ jobs:
               ;;
           esac
 
-          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ \
+            || ! "$BASE_REF" =~ ^[A-Za-z0-9._-]+$ ]]; then
             echo "::error::Unexpected Pull Request metadata."
             exit 1
           fi
@@ -70,8 +72,9 @@ jobs:
           # is main, so the diff below is exactly what merging would change, even
           # when the fork is behind main. GitHub builds it on demand, so ask for
           # the Pull Request first, then wait until the ref is the merge of this
-          # head commit. The request only prompts GitHub; the ref check below is
-          # what decides, so a failed request cannot make a submission pass.
+          # head commit into the current tip of main. The request only prompts
+          # GitHub; the ref check below is what decides, so a failed request
+          # cannot make a submission pass.
           merged=
           for ((attempt = 1; attempt <= MERGE_REF_ATTEMPTS; attempt++)); do
             if [[ -n "${PR_API_URL:-}" ]]; then
@@ -81,8 +84,11 @@ jobs:
                 "$PR_API_URL" || echo "Could not ask GitHub for the Pull Request (attempt ${attempt})."
             fi
             if git -c fetch.fsckObjects=true fetch --quiet --no-tags --depth=2 "$REPO_URL" \
-                "+refs/pull/${PR_NUMBER}/merge:refs/validate/merge" 2>/dev/null \
-              && [[ "$(git rev-parse --verify --quiet 'refs/validate/merge^2')" == "$HEAD_SHA" ]]; then
+                "+refs/pull/${PR_NUMBER}/merge:refs/validate/merge" \
+                "+refs/heads/${BASE_REF}:refs/validate/base" 2>/dev/null \
+              && [[ "$(git rev-parse --verify --quiet 'refs/validate/merge^2')" == "$HEAD_SHA" ]] \
+              && [[ "$(git rev-parse --verify --quiet 'refs/validate/merge^1')" \
+                == "$(git rev-parse --verify --quiet refs/validate/base)" ]]; then
               merged=$(git rev-parse --verify refs/validate/merge)
               break
             fi
@@ -91,7 +97,7 @@ jobs:
             fi
           done
           if [[ -z "$merged" ]]; then
-            echo "::error::No test merge of this Pull Request is available. Resolve any conflict with main, then re-run the check."
+            echo "::error::No current test merge of this Pull Request is available. Resolve any conflict with main, then re-run the check."
             exit 1
           fi
           base=$(git rev-parse --verify "${merged}^1")

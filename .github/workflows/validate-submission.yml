@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate paths and filenames without running submitted code
         env:
@@ -40,9 +41,15 @@ jobs:
           changed_count=0
           deleted_count=0
 
+          # A rename must be checked as both a source deletion and a destination.
+          # Materialize the diff first so Git errors fail the step.
+          diff_dir=$(mktemp -d)
+          trap 'rm -rf -- "$diff_dir"' EXIT
+          git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$diff_dir/deleted"
+          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$diff_dir/changed"
           while IFS= read -r -d '' path; do
             deleted_count=$((deleted_count + 1))
-          done < <(git diff --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          done < "$diff_dir/deleted"
 
           if ((deleted_count > 0)); then
             echo "::error::Student Pull Requests must not delete existing files."
@@ -80,11 +87,11 @@ jobs:
             fi
 
             mode=$(git ls-tree "$HEAD_SHA" -- "$path" | awk '{print $1}')
-            if [[ "$mode" == "120000" ]]; then
-              echo "::error file=$path::Symbolic links are not accepted as submissions."
+            if [[ "$mode" != "100644" && "$mode" != "100755" ]]; then
+              echo "::error file=$path::Only regular files are accepted as submissions."
               errors=1
             fi
-          done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          done < "$diff_dir/changed"
 
           if ((changed_count == 0)); then
             echo "::error::The Pull Request contains no changed files."

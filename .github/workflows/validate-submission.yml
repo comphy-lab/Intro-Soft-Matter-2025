@@ -1,8 +1,8 @@
 name: Validate student submission
 
 # pull_request_target runs this file as it is on main, so a Pull Request cannot
-# change the rules it is checked against. The job has no token and no secrets,
-# and it never checks out or runs anything from the Pull Request: it fetches the
+# change the rules it is checked against. The job has no secrets and never
+# checks out or runs anything from the Pull Request: it fetches the
 # proposed commits into a bare repository and reads paths and file modes only.
 on:
   pull_request_target:
@@ -13,7 +13,10 @@ on:
       - reopened
       - synchronize
 
-permissions: {}
+# The token can only read Pull Request metadata. It is used for one API call
+# and is never given to Git.
+permissions:
+  pull-requests: read
 
 concurrency:
   group: validate-submission-${{ github.event.pull_request.number }}
@@ -31,6 +34,8 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          PR_API_URL: ${{ github.api_url }}/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
           MERGE_REF_ATTEMPTS: "12"
           MERGE_REF_WAIT_SECONDS: "10"
         shell: bash
@@ -63,10 +68,18 @@ jobs:
 
           # GitHub's test merge of this Pull Request into main. Its first parent
           # is main, so the diff below is exactly what merging would change, even
-          # when the fork is behind main. GitHub builds it shortly after a push,
-          # so wait until it is the merge of this head commit.
+          # when the fork is behind main. GitHub builds it on demand, so ask for
+          # the Pull Request first, then wait until the ref is the merge of this
+          # head commit. The request only prompts GitHub; the ref check below is
+          # what decides, so a failed request cannot make a submission pass.
           merged=
           for ((attempt = 1; attempt <= MERGE_REF_ATTEMPTS; attempt++)); do
+            if [[ -n "${PR_API_URL:-}" ]]; then
+              curl --silent --show-error --fail --max-time 20 --output /dev/null \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "Accept: application/vnd.github+json" \
+                "$PR_API_URL" || echo "Could not ask GitHub for the Pull Request (attempt ${attempt})."
+            fi
             if git -c fetch.fsckObjects=true fetch --quiet --no-tags --depth=2 "$REPO_URL" \
                 "+refs/pull/${PR_NUMBER}/merge:refs/validate/merge" 2>/dev/null \
               && [[ "$(git rev-parse --verify --quiet 'refs/validate/merge^2')" == "$HEAD_SHA" ]]; then
